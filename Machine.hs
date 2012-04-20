@@ -19,6 +19,7 @@ data Value = VClosure AExp Env
            | VPrimEq
            | VPrimVoid
            | VPrimCallCC
+           | VPrimBegin
 
 instance Show Value where
   show (VClosure _ _) = "<closure>"
@@ -33,6 +34,7 @@ instance Show Value where
   show VPrimEq = "_="
   show VPrimVoid = "_void"
   show VPrimCallCC = "_call/cc"
+  show VPrimBegin = "_begin"
 
 instance Eq Value where
   (VBool a) == (VBool b) = (a == b)
@@ -78,6 +80,16 @@ performSets env store ((ident, val) : rest)
   | ident `Map.member` env = Map.insert (env ! ident) val (performSets env store rest)
   | otherwise = error $ "Tried to set " ++ ident ++ ", but it hasn't been bound"
 
+evalPrim :: Value -> [Value] -> AExp -> CExp
+evalPrim VPrimAdd [VNum a, VNum b] k = MApp k [MNum (a + b)]
+evalPrim VPrimSub [VNum a, VNum b] k = MApp k [MNum (a - b)]
+evalPrim VPrimMult [VNum a, VNum b] k = MApp k [MNum (a * b)]
+evalPrim VPrimEq [a, b] k = MApp k [MBool (a == b)]
+evalPrim VPrimVoid _ k = MApp k [MVoid]
+evalPrim VPrimCallCC [v] k = MApp v [k, k]
+evalPrim VPrimBegin [] k = MApp k [MVoid]
+evalPrim VPrimBegin args k = MApp k [last args]
+
 step :: Machine -> GenSymState Machine
 step (Halt v) = return (Halt v)
 step (CES (Atomic val) env store) = return (Halt (atomLookup env store val))
@@ -86,6 +98,7 @@ step (CES (MApp fn args) env store) =
     VPrimHalt -> case args' of
       [v] -> return (Halt v)
       _ -> error "wrong number of args to VPrimHalt"
+
     VPrimAdd -> case (args, args') of
       ([_, _, k], [VNum a, VNum b, _]) -> return (CES (MApp k [MNum (a + b)]) env store)
       _ -> error "wrong number/type of args passer to VPrimAdd"
@@ -108,6 +121,11 @@ step (CES (MApp fn args) env store) =
                           [VClosure (MLambda [v, unusedCont] (MApp k [MId v])) env, kv]
         return (CES body env' store')
       _ -> error $ "Error: wrong type arg to call/cc (" ++ show args' ++ ")"
+    VPrimBegin -> case (reverse args, reverse args') of
+      ([k], _) -> return (CES (MApp k [MVoid]) env store)
+      ((k : _), (_ : importantVal : unimportantVals)) ->
+        return (CES (MApp k [importantVal]) env store)
+
     VClosure (MLambda formals body) clEnv -> do
         (env', store') <- updateEnvAndStore clEnv store formals args'
         return (CES body env' store')
@@ -123,8 +141,8 @@ step (CES (MSet ident value k) env store) =
 
 stepUntilHalt :: Machine -> GenSymState Value
 stepUntilHalt (Halt v) = return v
-stepUntilHalt m = step m >>= stepUntilHalt
--- stepUntilHalt m = step (unsafeLog m) >>= stepUntilHalt
+-- stepUntilHalt m = step m >>= stepUntilHalt
+stepUntilHalt m = step (unsafeLog m) >>= stepUntilHalt
 
 
 defToPair :: Env -> CDef -> (Identifier, Value)
@@ -146,7 +164,8 @@ startingEnvStore =
           ("*", VPrimMult),
           ("=", VPrimEq),
           ("void", VPrimVoid),
-          ("call/cc", VPrimCallCC)])
+          ("call/cc", VPrimCallCC),
+          ("begin", VPrimBegin)])
 
 runMachine :: CProg -> Value
 runMachine (CProg defs expr) =

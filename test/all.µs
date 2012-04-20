@@ -38,4 +38,5 @@
 
 (define (compose f g) (lambda (a) (f (g a))))
 
-(sum-when-you-apply-from-1-to square 10)
+;;(sum-when-you-apply-from-1-to square 10)
+(begin 2)

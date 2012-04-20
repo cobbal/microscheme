@@ -68,6 +68,17 @@ cpsM (SList [SId "lambda", SList formals, expr]) = do
         expToIds (subexp : _) = error ("lambda called with non-identifier " ++ show subexp)
 cpsM f = error ("WHY ERROR? " ++ show f)
 
+primSyntax :: SExp -> Bool
+primSyntax (SList (SId "let" : _)) = True
+primSyntax (SList (SId "if" : _)) = True
+primSyntax (SList (SId "set!" : _)) = True
+primSyntax _ = False
+
+cpsTk :: SExp -> (AExp -> CExp) -> GenSymState CExp
+cpsTk expr@(SList (SId "lambda" : _)) kont = do
+  m <- cpsM expr
+  return (kont m)
+
 cpsT :: SExp -> AExp -> GenSymState CExp
 cpsT expr@(SList (SId "lambda" : _)) cont = do
   m <- cpsM expr
@@ -86,12 +97,8 @@ cpsT (SList [SId "if", condition, consequent, alternate]) cont = do
 cpsT (SList [SId "set!", SId i, val]) cont = do
   v <- gensym "v"
   cpsT val (MLambda [v] (MSet i (MId v) cont))
-cpsT (SList [SId "begin"]) cont = return (MApp cont [MVoid])
-cpsT (SList [SId "begin", expr]) cont = cpsT expr cont
-cpsT (SList (SId "begin" : expr : rest)) cont = do
-  u <- gensym "unused"
-  t <- cpsT (SList (SId "begin" : rest)) cont
-  cpsT expr (MLambda [u] t)
+cpsT expr _
+  | primSyntax expr = error $ "bad special form " ++ show expr
 cpsT (SList (fn : args)) cont = do
   f <- gensym "f"
   t <- helper f (reverse args) [] -- reverse needed since we recur inside-out
