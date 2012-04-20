@@ -1,4 +1,5 @@
 module SExp where
+-- import UnsafeLog
 import Data.Char
 
 type Identifier = String
@@ -14,23 +15,23 @@ instance Show SExp where
   show (SBool b) = show b
   show (SList l) = show l
 
-data Token = TLeftParen
-           | TRightParen
+data Token = TLeftParen Char
+           | TRightParen Char
            | TNumber Integer
            | TId Identifier
            | TBool Bool
 
 instance Show Token where
-  show TLeftParen = "'('"
-  show TRightParen = "')'"
+  show (TLeftParen c) = "'" ++ [c] ++ "'"
+  show (TRightParen c) = "'" ++ [c] ++ "'"
   show (TNumber i) = "<num " ++ show i ++ ">"
   show (TId s) = "<ID " ++ show s ++ ">"
   show (TBool False) = "<#f>"
   show (TBool True) = "<#t>"
 
 instance Eq Token where
-  TLeftParen == TLeftParen = True
-  TRightParen == TRightParen = True
+  TLeftParen c1 == TLeftParen c2 = (c1 == c2)
+  TRightParen c1 == TRightParen c2 = (c1 == c2)
   TNumber a == TNumber b = a == b
   TId a == TId b = a == b
   TBool a == TBool b = a == b
@@ -42,6 +43,12 @@ isLParen c = c `elem` "([{"
 isRParen :: Char -> Bool
 isRParen c = c `elem` ")]}"
 
+closeParenFor :: Char -> Char
+closeParenFor '(' = ')'
+closeParenFor '[' = ']'
+closeParenFor '{' = '}'
+closeParenFor _ = error ""
+
 mLex :: String -> [Token]
 
 mLex "" = []
@@ -49,14 +56,11 @@ mLex "" = []
 mLex (whitespace : s)
   | isSpace whitespace = mLex s
 
-mLex (c : s)
-  | c `elem` "([{" = TLeftParen : mLex s
-mLex ('[' : s) = TLeftParen : mLex s
-mLex ('{' : s) = TLeftParen : mLex s
+mLex (';' : s) = mLex (dropWhile (/= '\n') s)
 
-mLex (')' : s) = TRightParen : mLex s
-mLex (']' : s) = TRightParen : mLex s
-mLex ('}' : s) = TRightParen : mLex s
+mLex (c : s)
+  | isLParen c = TLeftParen c : mLex s
+  | isRParen c = TRightParen c : mLex s
 
 mLex ('#' : 't' : s) = TBool True : mLex s
 mLex ('#' : 'f' : s) = TBool False : mLex s
@@ -95,11 +99,11 @@ parseSNumber (TNumber n : rest) = Just (SNumber n, rest)
 parseSNumber _ = Nothing
 
 parseSList :: ExpParser
-parseSList tokens = do
-  (exps, tokens2) <- eat TLeftParen tokens >>=
-                     parseAllThe parseSubExp
-  tokens3 <- eat TRightParen tokens2
-  return (SList exps, tokens3)
+parseSList (TLeftParen c : tokens) = do
+  (exps, tokens') <- parseAllThe parseSubExp tokens
+  tokens'' <- eat (TRightParen $ closeParenFor c) tokens'
+  return (SList exps, tokens'')
+parseSList _ = Nothing
 
 eat :: Token -> [Token] -> Maybe [Token]
 eat expected (token : rest)
@@ -110,7 +114,7 @@ parseAllThe :: ([Token] -> Maybe (a, [Token])) -> [Token] -> Maybe ([a], [Token]
 parseAllThe parseFn tokens = Just (parseAllHelp tokens)
   where parseAllHelp subtok =
           case parseFn subtok of
-            Just (a, rest) -> let (as, rest2) = parseAllHelp rest in (a : as, rest2)
+            Just (a, rest) -> let (as, rest') = parseAllHelp rest in (a : as, rest')
             Nothing -> ([], subtok)
 
 firstOneThatWorks :: [(a -> Maybe b)] -> a -> Maybe b

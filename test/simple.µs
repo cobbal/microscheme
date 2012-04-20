@@ -1,0 +1,2 @@
+(define (a) 1)
+(begin (set! a 2) a)
