@@ -1,5 +1,5 @@
 (define (sum-when-you-apply-from-1-to f max)
- (let ([help 0]
+ (let ([help 7]
        [sum 0])
   (begin
    (set! help
@@ -20,10 +20,6 @@
    (set! i (+ i 1))
    i)))
 
-;;(begin
- ;;(test)
- ;;(the-continuation (void)))
-
 (define (slow+ a b)
  (if (= 0 a)
   b
@@ -34,9 +30,14 @@
   0
   (slow+ b (slow* (- a 1) b))))
 
-(define (square a) (slow* a a))
+(define (square a) (* a a))
 
 (define (compose f g) (lambda (a) (f (g a))))
 
-;;(sum-when-you-apply-from-1-to square 10)
-(begin 2)
+;;(sum-when-you-apply-from-1-to (compose square square) 1000)
+;;(begin 3 4 2)
+
+(begin
+ (test)
+ (the-continuation (void)))
+

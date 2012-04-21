@@ -1,5 +1,7 @@
+GHCFLAGS=-Wall -XMultiParamTypeClasses
+
 Main: *.hs
-	ghc -Wall *.hs
+	ghc $(GHCFLAGS) *.hs
 
 clean:
 	rm -f Main *.o *.hi

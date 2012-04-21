@@ -1,18 +1,18 @@
 module CPS where
 import SExp
 import Data.List
-import Control.Monad.State
+import GenSym
 
 data CExp = Atomic AExp
-          | MApp AExp [AExp]
-          | MIf AExp CExp CExp
-          | MSet Identifier AExp AExp
+          | App AExp [AExp]
+          | If AExp CExp CExp
+          | Set Identifier AExp AExp
 
-data AExp = MNum Integer
-          | MBool Bool
-          | MId Identifier
-          | MLambda [Identifier] CExp
-          | MVoid
+data AExp = Num Integer
+          | Bool Bool
+          | Id Identifier
+          | Lambda [Identifier] CExp
+          | Void
 
 data CProg = CProg [CDef] CExp
 
@@ -26,42 +26,35 @@ instance Show CDef where
 
 instance Show CExp where
   show (Atomic a) = show a
-  show (MApp fn args) = concat ["(", show (Atomic fn),
+  show (App fn args) = concat ["(", show (Atomic fn),
                                " ", intercalate " " (map show args), ")"]
-  show (MIf val consequent alternate) = concat ["(_if ", show val,
+  show (If val consequent alternate) = concat ["(_if ", show val,
                                                 " ", show consequent,
                                                 " ", show alternate, ")"]
-  show (MSet ident value k) = concat ["(_set ", ident,
+  show (Set ident value k) = concat ["(_set ", ident,
                                       " ", show value,
                                       " ",  show k, ")"]
 
 instance Show AExp where
-  show (MNum n) = show n
-  show (MBool True) = "#t"
-  show (MBool False) = "#f"
-  show (MId i) = i
-  show (MLambda formals expr) = concat ["(λ (", intercalate " " formals, ") ",
+  show (Num n) = show n
+  show (Bool True) = "#t"
+  show (Bool False) = "#f"
+  show (Id i) = i
+  show (Lambda formals expr) = concat ["(λ (", intercalate " " formals, ") ",
                                         show expr, ")"]
-  show MVoid = "VOID"
+  show Void = "VOID"
 
 sLambda :: [SExp] -> SExp -> SExp
 sLambda formals expr = (SList [SId "lambda", SList formals, expr])
 
-type GenSymState = State Integer
-gensym :: String -> GenSymState Identifier
-gensym sym = do
-  s <- get
-  put (s + 1)
-  return (sym ++ "$" ++ show s)
-
 cpsM :: SExp -> GenSymState AExp
-cpsM (SId i) = return (MId i)
-cpsM (SNumber n) = return (MNum n)
-cpsM (SBool b) = return (MBool b)
+cpsM (SId i) = return (Id i)
+cpsM (SNumber n) = return (Num n)
+cpsM (SBool b) = return (Bool b)
 cpsM (SList [SId "lambda", SList formals, expr]) = do
   k <- gensym "k"
-  t <- cpsT expr (MId k)
-  return (MLambda (expToIds formals ++ [k]) t)
+  t <- cpsTc expr (Id k)
+  return (Lambda (expToIds formals ++ [k]) t)
   where expToIds :: [SExp] -> [Identifier]
         expToIds [] = []
         expToIds (SId i : is) = i : expToIds is
@@ -74,62 +67,64 @@ primSyntax (SList (SId "if" : _)) = True
 primSyntax (SList (SId "set!" : _)) = True
 primSyntax _ = False
 
-cpsTk :: SExp -> (AExp -> CExp) -> GenSymState CExp
+
+cpsTk :: SExp -> (AExp -> GenSymState CExp) -> GenSymState CExp
 cpsTk expr@(SList (SId "lambda" : _)) kont = do
   m <- cpsM expr
-  return (kont m)
-
-cpsT :: SExp -> AExp -> GenSymState CExp
-cpsT expr@(SList (SId "lambda" : _)) cont = do
+  kont m
+cpsTk fullExp@(SList _) kont = do
+  rv <- gensym "rv"
+  ik <- kont (Id rv)
+  let cont = (Lambda [rv] ik) in
+    cpsTc fullExp cont
+cpsTk expr kont = do
   m <- cpsM expr
-  return (MApp cont [m])
-cpsT fullExp@(SList [SId "let", SList bindings, expr]) cont =
+  kont m
+
+cpsTc :: SExp -> AExp -> GenSymState CExp
+cpsTc expr@(SList (SId "lambda" : _)) cont = do
+  m <- cpsM expr
+  return (App cont [m])
+cpsTc fullExp@(SList [SId "let", SList bindings, expr]) cont =
   let bindings' = map parseBinding bindings in
-  cpsT (SList (sLambda (map fst bindings') expr : (map snd bindings'))) cont
+  cpsTc (SList (sLambda (map fst bindings') expr : (map snd bindings'))) cont
   where parseBinding :: SExp -> (SExp, SExp)
         parseBinding (SList [i, e]) = (i, e)
         parseBinding _ = error $ "Error: funky let form: " ++ show fullExp
-cpsT (SList [SId "if", condition, consequent, alternate]) cont = do
+cpsTc (SList [SId "if", condition, consequent, alternate]) cont = do
   v <- gensym "v"
-  consequent' <- cpsT consequent cont
-  alternate' <- cpsT alternate cont
-  cpsT condition (MLambda [v] (MIf (MId v) consequent' alternate'))
-cpsT (SList [SId "set!", SId i, val]) cont = do
+  consequent' <- cpsTc consequent cont
+  alternate' <- cpsTc alternate cont
+  cpsTc condition (Lambda [v] (If (Id v) consequent' alternate'))
+cpsTc (SList [SId "set!", SId i, val]) cont = do
   v <- gensym "v"
-  cpsT val (MLambda [v] (MSet i (MId v) cont))
-cpsT expr _
+  cpsTc val (Lambda [v] (Set i (Id v) cont))
+cpsTc expr _
   | primSyntax expr = error $ "bad special form " ++ show expr
-cpsT (SList (fn : args)) cont = do
-  f <- gensym "f"
-  t <- helper f (reverse args) [] -- reverse needed since we recur inside-out
-  cpsT fn (MLambda [f] t)
-  where helper :: Identifier -> [SExp] -> [AExp] -> GenSymState CExp
-        helper f [] bound = return (MApp (MId f) (bound ++ [cont]))
-        helper f (arg : args') bound = do
-          e <- gensym "e"
-          subexp <- helper f args' ((MId e) : bound)
-          cpsT arg (MLambda [e] subexp)
-cpsT expr cont = do
-  m <- cpsM expr
-  return (MApp cont [m])
+cpsTc (SList (fn : args)) cont = do
+  -- reverse because recursion turns stuff inside out
+  cpsTk fn (\df -> helper df args [])
+  where helper :: AExp -> [SExp] -> [AExp] -> GenSymState CExp
+        helper f [] bound = return (App f (bound ++ [cont]))
+        helper f (arg : args') bound =
+          cpsTk arg (\de -> helper f args' (bound ++ [de]))
 
-parseProgram :: [SExp] -> CProg
-parseProgram forms = runGenSymState (parseProgramWithState forms)
-  where parseProgramWithState :: [SExp] -> GenSymState CProg
-        parseProgramWithState [expr] = do
-          m <- cpsT expr (MId "_halt")
-          return (CProg [] m)
-        parseProgramWithState (def : defs) = do
-          CProg defs' expr <- parseProgramWithState defs
-          def' <- parseDef def
-          return (CProg (def' : defs') expr)
-        parseProgramWithState [] = error "you forgot your program"
+cpsTc expr cont = do
+  m <- cpsM expr
+  return (App cont [m])
+
+parseProgram :: [SExp] -> GenSymState CProg
+parseProgram [expr] = do
+  m <- cpsTc expr (Id "_halt")
+  return (CProg [] m)
+parseProgram (def : defs) = do
+  CProg defs' expr <- parseProgram defs
+  def' <- parseDef def
+  return (CProg (def' : defs') expr)
+parseProgram [] = error "you forgot your program"
 
 parseDef :: SExp -> GenSymState CDef
 parseDef (SList [SId "define", SList (SId fn : formals), expr]) = do
   value <- cpsM (sLambda formals expr)
   return (CDef fn value)
 parseDef _ = error "you defined a not defined thingy in the define thingy slot"
-
-runGenSymState :: GenSymState a -> a
-runGenSymState s = evalState s 0
