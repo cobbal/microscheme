@@ -1,7 +1,8 @@
 GHCFLAGS=-Wall -XMultiParamTypeClasses
+PRODUCT=microscheme
 
-Main: *.hs
-	ghc $(GHCFLAGS) *.hs
+$(PRODUCT): *.hs
+	ghc $(GHCFLAGS) -o $(PRODUCT) *.hs
 
 clean:
-	rm -f Main *.o *.hi
+	rm -f $(PRODUCT) *.o *.hi

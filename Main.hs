@@ -1,20 +1,15 @@
 module Main where
 
---import UnsafeLog
-import SExp
-import CPS
-import Machine
-import GenSym
-
-testProgram :: String
-testProgram = "(define (fact x) (if (= x 0) 1 (* x (fact (- x 1))))) (fact 100)"
+import SExp (parseSExps)
+import CPS (parseProgram)
+import Machine (Value, runMachine)
+import Token (tokenize)
+import GenSym (runGenSymState)
 
 evalString :: String -> Value
-evalString s = case parseSExps (mLex s) of
-  Just exprs -> runGenSymState ((parseProgram exprs) >>= runMachine)
+evalString s = case parseSExps (tokenize s) of
+  Just exprs -> runGenSymState (parseProgram exprs >>= runMachine)
   Nothing -> error "Parse Error"
-
 
 main :: IO ()
 main = interact (show . evalString) >> putStr "\n"
-

@@ -1,5 +1,6 @@
 module GenSym where
-import Control.Monad.State
+
+import Control.Monad.State (State, get, put, evalState)
 
 type GenSymState = State Integer
 

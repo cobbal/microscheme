@@ -1,80 +1,25 @@
 module SExp where
--- import UnsafeLog
-import Data.Char
 
-type Identifier = String
+import qualified Token
+import Token (Token)
+import Identifier (Identifier)
 
-data SExp = SId Identifier
-          | SBool Bool
-          | SNumber Integer
-          | SList [SExp]
+data SExp = Id Identifier
+          | Boolean Bool
+          | Number Integer
+          | List [SExp]
 
 instance Show SExp where
-  show (SNumber n) = show n
-  show (SId i) = i
-  show (SBool b) = show b
-  show (SList l) = show l
-
-data Token = TLeftParen Char
-           | TRightParen Char
-           | TNumber Integer
-           | TId Identifier
-           | TBool Bool
-
-instance Show Token where
-  show (TLeftParen c) = "'" ++ [c] ++ "'"
-  show (TRightParen c) = "'" ++ [c] ++ "'"
-  show (TNumber i) = "<num " ++ show i ++ ">"
-  show (TId s) = "<ID " ++ show s ++ ">"
-  show (TBool False) = "<#f>"
-  show (TBool True) = "<#t>"
-
-instance Eq Token where
-  TLeftParen c1 == TLeftParen c2 = (c1 == c2)
-  TRightParen c1 == TRightParen c2 = (c1 == c2)
-  TNumber a == TNumber b = a == b
-  TId a == TId b = a == b
-  TBool a == TBool b = a == b
-  _ == _ = False
-
-isLParen :: Char -> Bool
-isLParen c = c `elem` "([{"
-
-isRParen :: Char -> Bool
-isRParen c = c `elem` ")]}"
+  show (Number n) = show n
+  show (Id i) = i
+  show (Boolean b) = show b
+  show (List l) = show l
 
 closeParenFor :: Char -> Char
 closeParenFor '(' = ')'
 closeParenFor '[' = ']'
 closeParenFor '{' = '}'
-closeParenFor _ = error ""
-
-mLex :: String -> [Token]
-
-mLex "" = []
-
-mLex (whitespace : s)
-  | isSpace whitespace = mLex s
-
-mLex (';' : s) = mLex (dropWhile (/= '\n') s)
-
-mLex (c : s)
-  | isLParen c = TLeftParen c : mLex s
-  | isRParen c = TRightParen c : mLex s
-
-mLex ('#' : 't' : s) = TBool True : mLex s
-mLex ('#' : 'f' : s) = TBool False : mLex s
-
-mLex s@(c : _)
-  | isDigit c = TNumber (read text) : mLex rest
-  | otherwise = TId text : mLex rest
-  where (text, rest) = break tokenBoundary s
-        tokenBoundary :: Char -> Bool
-        tokenBoundary ch
-          | isSpace ch = True
-          | isRParen ch = True
-          | isLParen ch = True
-          | otherwise = False
+closeParenFor c = error ("Don't know how to close paren `" ++ [c] ++ "'.")
 
 parseSExps :: [Token] -> Maybe [SExp]
 parseSExps tokens =
@@ -84,26 +29,26 @@ parseSExps tokens =
 
 type ExpParser = [Token] -> Maybe (SExp, [Token])
 parseSubExp :: ExpParser
-parseSubExp tokens = firstOneThatWorks [parseSId, parseSBool, parseSNumber, parseSList] tokens
+parseSubExp tokens = firstOneThatWorks [parseId, parseBoolean, parseNumber, parseList] tokens
 
-parseSId :: ExpParser
-parseSId (TId s : rest) = Just (SId s, rest)
-parseSId _ = Nothing
+parseId :: ExpParser
+parseId (Token.Id s : rest) = Just (Id s, rest)
+parseId _ = Nothing
 
-parseSBool :: ExpParser
-parseSBool (TBool b : rest) = Just (SBool b, rest)
-parseSBool _ = Nothing
+parseBoolean :: ExpParser
+parseBoolean (Token.Boolean b : rest) = Just (Boolean b, rest)
+parseBoolean _ = Nothing
 
-parseSNumber :: ExpParser
-parseSNumber (TNumber n : rest) = Just (SNumber n, rest)
-parseSNumber _ = Nothing
+parseNumber :: ExpParser
+parseNumber (Token.Number n : rest) = Just (Number n, rest)
+parseNumber _ = Nothing
 
-parseSList :: ExpParser
-parseSList (TLeftParen c : tokens) = do
+parseList :: ExpParser
+parseList (Token.LeftParen c : tokens) = do
   (exps, tokens') <- parseAllThe parseSubExp tokens
-  tokens'' <- eat (TRightParen $ closeParenFor c) tokens'
-  return (SList exps, tokens'')
-parseSList _ = Nothing
+  tokens'' <- eat (Token.RightParen (closeParenFor c)) tokens'
+  return (List exps, tokens'')
+parseList _ = Nothing
 
 eat :: Token -> [Token] -> Maybe [Token]
 eat expected (token : rest)
