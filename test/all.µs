@@ -34,7 +34,7 @@
 
 (define (compose f g) (lambda (a) (f (g a))))
 
-;;(sum-when-you-apply-from-1-to (compose square square) 1000)
+(print (sum-when-you-apply-from-1-to (compose square square) 1000))
 ;;(begin 3 4 2)
 
 (begin

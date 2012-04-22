@@ -4,7 +4,7 @@ import Data.List (intercalate)
 import SExp
 import GenSym
 import qualified CPS
-import UnsafeLog
+-- import UnsafeLog
 
 import qualified Data.Map as Map
 import Data.Map ((!))
@@ -46,8 +46,8 @@ instance Show CExp where
   show (Set ident val k) = "(_set! " ++ ident ++ " " ++ show val ++ " " ++ show k ++ ")"
 
 instance Show Value where
-  -- show (Closure _ _) = "<closure>"
-  show (Closure l _) = "closure {" ++ show (ExpLambda l) ++ "}"
+  show (Closure _ _) = "<closure>"
+  -- show (Closure l _) = "closure {" ++ show (ExpLambda l) ++ "}"
   show (Bool b) = show b
   show (Num i) = show i
   show Void = "VOID"
@@ -154,8 +154,8 @@ step (CES (Set ident value k) env store) =
 
 stepUntilHalt :: Machine -> GenSymState Value
 stepUntilHalt (Halt v) = return v
--- stepUntilHalt m = step m >>= stepUntilHalt
-stepUntilHalt m = step (unsafeLog m) >>= stepUntilHalt
+stepUntilHalt m = step m >>= stepUntilHalt
+-- stepUntilHalt m = step (unsafeLog m) >>= stepUntilHalt
 
 class FromCPS a b where
   fromCPS :: a -> b

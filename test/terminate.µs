@@ -1,0 +1,10 @@
+(define (cont) (void))
+
+(define (init-cont)
+  (call/cc
+   (lambda (k)
+     (set! cont k))))
+
+(begin
+  (init-cont)
+  (cont (void)))

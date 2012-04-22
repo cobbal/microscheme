@@ -1,4 +1,1 @@
-(let ([k #f])
- (begin
-  (call/cc (lambda (k1) (set! k k1)))
-
+(+ 2 2)
