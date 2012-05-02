@@ -1,0 +1,8 @@
+microscheme is an interpreter for a very small subset of scheme written in Haskell
+
+Features include
+ - call/cc
+ - set!
+ - excessive memory leaking
+
+
